@@ -1,0 +1,17 @@
+-- Escuadra Software: capa multi-negocio. Ejecutar después del esquema actual.
+create table if not exists public.businesses (id uuid primary key default gen_random_uuid(), name text not null, slug text unique, currency text not null default 'ARS', timezone text not null default 'America/Argentina/Buenos_Aires', active boolean not null default true, created_at timestamptz not null default now());
+create table if not exists public.business_settings (business_id uuid primary key references public.businesses(id) on delete cascade, brand_name text, logo_url text, primary_color text not null default '#27187E', background_color text not null default '#F7F7FF', updated_at timestamptz not null default now());
+create table if not exists public.business_members (business_id uuid not null references public.businesses(id) on delete cascade, user_id uuid not null references auth.users(id) on delete cascade, role public.user_role not null default 'seller', active boolean not null default true, created_at timestamptz not null default now(), primary key (business_id,user_id));
+alter table public.profiles add column if not exists business_id uuid references public.businesses(id);
+alter table public.businesses enable row level security; alter table public.business_settings enable row level security; alter table public.business_members enable row level security;
+create or replace function public.current_business_id() returns uuid language sql security definer set search_path=public as $$ select business_id from public.profiles where id=auth.uid() $$;
+create or replace function public.is_business_admin(target_business uuid) returns boolean language sql security definer set search_path=public as $$ select exists(select 1 from public.business_members where business_id=target_business and user_id=auth.uid() and role='admin' and active=true) $$;
+drop policy if exists "members read own businesses" on public.businesses;
+create policy "members read own businesses" on public.businesses for select to authenticated using (exists(select 1 from public.business_members m where m.business_id=id and m.user_id=auth.uid() and m.active));
+drop policy if exists "members read own settings" on public.business_settings;
+create policy "members read own settings" on public.business_settings for select to authenticated using (business_id=public.current_business_id());
+drop policy if exists "admins manage own settings" on public.business_settings;
+create policy "admins manage own settings" on public.business_settings for all to authenticated using (public.is_business_admin(business_id)) with check (public.is_business_admin(business_id));
+drop policy if exists "members read own membership" on public.business_members;
+create policy "members read own membership" on public.business_members for select to authenticated using (user_id=auth.uid() or public.is_business_admin(business_id));
+do $$ declare default_business uuid; begin select id into default_business from public.businesses order by created_at limit 1; if default_business is null then insert into public.businesses(name,slug) values('Escuadra Software','escuadra') returning id into default_business; insert into public.business_settings(business_id,brand_name) values(default_business,'Escuadra Software'); end if; update public.profiles set business_id=default_business where business_id is null; insert into public.business_members(business_id,user_id,role) select default_business,id,role from public.profiles on conflict (business_id,user_id) do update set role=excluded.role,active=true; end $$;

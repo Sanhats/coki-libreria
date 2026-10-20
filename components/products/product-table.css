@@ -1,0 +1,2 @@
+.pagination{display:flex;justify-content:center;align-items:center;gap:24px;margin:18px 0;color:var(--muted);font-size:13px}.pagination button:disabled{opacity:.4;cursor:not-allowed}
+.table-action{margin-left:12px}.table-action:first-letter{color:inherit}

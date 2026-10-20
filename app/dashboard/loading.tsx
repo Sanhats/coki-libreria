@@ -1,0 +1,1 @@
+export default function Loading(){return <main className="panel page-loading"><div className="loading-line short"/><div className="loading-line title"/><div className="loading-line text"/><div className="loading-grid"><div/><div/><div/></div></main>}
