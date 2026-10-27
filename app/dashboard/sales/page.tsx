@@ -35,13 +35,18 @@ export default function Sales() {
         .maybeSingle();
       setCashOpen(!!cash);
       if (cash) {
-        const { data, error } = await s
-          .from("products")
-          .select("id,name,sku,stock,sale_price")
-          .eq("active", true)
-          .order("name");
-        if (error) setError(error.message);
-        setProducts(data || []);
+        const [productsResult, recentResult] = await Promise.all([
+          s.from("products").select("id,name,sku,stock,sale_price").eq("active", true),
+          s.from("sale_items").select("product_id,sales!inner(created_at)").order("created_at", { referencedTable: "sales", ascending: false }).limit(500),
+        ]);
+        if (productsResult.error) setError(productsResult.error.message);
+        if (recentResult.error) setError(recentResult.error.message);
+        const lastSold = new Map<string, number>();
+        (recentResult.data || []).forEach((item: any) => {
+          const timestamp = new Date(item.sales?.created_at || 0).getTime();
+          if (timestamp > (lastSold.get(item.product_id) || 0)) lastSold.set(item.product_id, timestamp);
+        });
+        setProducts([...(productsResult.data || [])].sort((a, b) => (lastSold.get(b.id) || 0) - (lastSold.get(a.id) || 0) || a.name.localeCompare(b.name, "es")));
       }
     }
     init();
@@ -134,9 +139,8 @@ export default function Sales() {
                 >
                   <span>
                     <strong>{p.name}</strong>
-                    <small>{p.stock === 1 ? "Stock estimado · Tocar para agregar" : `${p.sku} · Disponible: ${p.stock}`}</small>
                   </span>
-                  <span className="product-result-price"><b>${Number(p.sale_price).toFixed(2)}</b><em>Agregar</em></span>
+                  <span className="product-result-price"><b>${Number(p.sale_price).toFixed(2)}</b></span>
                 </button>
               ))}
           </div>
